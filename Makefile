@@ -1,6 +1,6 @@
-EXECUTABLE=
+EXECUTABLE=smtool
 VERSION=$(shell git describe --tags --always --long --dirty)
-WINDOWS=$(EXECUTABLE)_windows_amd64_$(VERSION).exe
+WINDOWS=$(EXECUTABLE)_windows_amd64_$(VERSION)
 LINUX=$(EXECUTABLE)_linux_amd64_$(VERSION)
 DARWIN=$(EXECUTABLE)_darwin_amd64_$(VERSION)
 
@@ -21,13 +21,13 @@ linux: $(LINUX)
 darwin: $(DARWIN)
 
 $(WINDOWS):
-	env GOOS=windows GOARCH=amd64 go build -v -o bin/$(WINDOWS) -ldflags="-s -w -X main.version=$(VERSION)" 
+	env GOOS=windows GOARCH=amd64 go build -v -o bin/win/$(EXECUTABLE).exe -ldflags="-s -w -X main.version=$(VERSION)" && zip --junk-paths bin/$(WINDOWS).zip bin/win/$(EXECUTABLE).exe
 
 $(LINUX):
-	env GOOS=linux GOARCH=amd64 go build -v -o bin/$(LINUX) -ldflags="-s -w -X main.version=$(VERSION)"
+	env GOOS=linux GOARCH=amd64 go build -v -o bin/linux/$(EXECUTABLE) -ldflags="-s -w -X main.version=$(VERSION)" && zip --junk-paths bin/$(LINUX).zip bin/linux/$(EXECUTABLE)
 
 $(DARWIN):
-	env GOOS=darwin GOARCH=amd64 go build -v -o bin/$(DARWIN) -ldflags="-s -w -X main.version=$(VERSION)" 
+	env GOOS=darwin GOARCH=amd64 go build -v -o bin/darwin/$(EXECUTABLE) -ldflags="-s -w -X main.version=$(VERSION)" && zip --junk-paths bin/$(DARWIN).zip bin/darwin/$(EXECUTABLE)
 
 clean:
-	rm -f $(WINDOWS) $(LINUX) $(DARWIN)
+	rm -rf bin
