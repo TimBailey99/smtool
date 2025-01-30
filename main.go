@@ -20,6 +20,10 @@ import (
 	"github.com/samber/lo"
 )
 
+var (
+	version string = "0.0.0"
+)
+
 type CsvSection struct {
 	Header  CsvHeader
 	Shots   []*CsvShotData
@@ -306,7 +310,7 @@ func completeSection(header []*CsvHeader, shots []*CsvShotData, summary []*CsvSu
 }
 
 func main() {
-	fmt.Println("SHRC Shotmarker tool")
+	fmt.Printf("SHRC Shotmarker tool (%s)\n", version)
 
 	exportCmd := flag.NewFlagSet("export", flag.ExitOnError)
 	exportFile := exportCmd.String("f", "", "Filename of the csv file to export")
@@ -369,11 +373,11 @@ func lookupValues(csvSections *[]*CsvSection) {
 		})
 
 		if success {
-			fmt.Printf("Matched %s to lookup %s (%s) \n", csvSection.Header.Name, found.Name, found.UIN)
+			fmt.Printf("Matched %s from '%s' to lookup '%s' (%s) \n", found.No, csvSection.Header.Name, found.Name, found.UIN)
 			csvSection.Header.Name = found.UIN
 			csvSection.Header.LookupRow = *found
 		} else {
-			fmt.Printf("Unable to match %s in lookup \n", csvSection.Header.Name)
+			fmt.Printf("Unable to match '%s' in lookup \n", csvSection.Header.Name)
 			csvSection.Header.Name = "UNKNOWN"
 			csvSection.Header.LookupRow = LookupRow{
 				No:         "999",
