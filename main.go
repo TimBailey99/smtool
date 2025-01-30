@@ -186,7 +186,9 @@ func convertFile(fileName string, outputFolder string) {
 			comp.No = lo.Map(shots, func(s *CsvShotData, index int) JsonShotData {
 				value := 0
 				if s.Score == "X" {
-					value = 7
+					value = 6
+				} else if s.Score == "V" {
+					value = 5
 				} else {
 					i, _ := strconv.Atoi(s.Score)
 					value = i
