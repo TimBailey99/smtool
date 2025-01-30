@@ -200,6 +200,8 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 		lineNumber++
 		line := scanner.Text()
 
+		// fmt.Printf("line %03d %s\n", lineNumber, state)
+
 		// Skip rows 1 & 2
 		if lineNumber <= 2 {
 			continue
@@ -237,20 +239,7 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 				}
 			}
 
-			data := CsvSection{}
-			data.Header = *header[0]
-			data.Shots = shots
-			data.Summary = summary
-
-			result = append(result, &data)
-
-			b, err := json.MarshalIndent(data, "", "  ")
-			if err != nil {
-				fmt.Println("error:", err)
-			}
-			// os.Stdout.Write(b)
-			csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
-			os.WriteFile(csvJsonFileName, b, 0644)
+			result = completeSection(header, shots, summary, result, outputFolder, groupNumber)
 
 			groupNumber++
 			state = "Waiting"
@@ -289,7 +278,31 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 		log.Fatal(err)
 	}
 
+	result = completeSection(header, shots, summary, result, outputFolder, groupNumber)
+
+	fmt.Println("Done")
+
 	return &result
+}
+
+func completeSection(header []*CsvHeader, shots []*CsvShotData, summary []*CsvSummaryData, result []*CsvSection, outputFolder string, groupNumber int) []*CsvSection {
+	data := CsvSection{}
+	data.Header = *header[0]
+	data.Shots = shots
+	data.Summary = summary
+
+	result = append(result, &data)
+
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	// os.Stdout.Write(b)
+	csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
+	os.WriteFile(csvJsonFileName, b, 0644)
+
+	// fmt.Println(fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber))
+	return result
 }
 
 func main() {
@@ -356,7 +369,7 @@ func lookupValues(csvSections *[]*CsvSection) {
 		})
 
 		if success {
-			fmt.Printf("Matched %s to lookup \n", csvSection.Header.Name)
+			fmt.Printf("Matched %s to lookup %s (%s) \n", csvSection.Header.Name, found.Name, found.UIN)
 			csvSection.Header.Name = found.UIN
 			csvSection.Header.LookupRow = *found
 		} else {
