@@ -105,13 +105,17 @@ func convertFile(fileName string, outputFolder string) {
 			csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
 			os.WriteFile(csvJsonFileName, b, 0644)
 
+			// Create OZScore compatible JSON
+			const shortForm = "Jan 02 2006"
+			jDate, _ := time.Parse(shortForm, header[0].Date)
+
+			jsonFileName := fmt.Sprintf("%s_%s_tr_0.json", header[0].Name, jDate.Format("0102"))
+
 			j := JsonData{}
 			j.Code = 0
 			j.Format = 2
 			j.Date = header[0].Date
-
-			const shortForm = "Jan 02 2006"
-			jDate, _ := time.Parse(shortForm, j.Date)
+			j.Filename = jsonFileName
 
 			j.Year = fmt.Sprintf("%v", jDate.Year())
 
@@ -228,8 +232,8 @@ func convertFile(fileName string, outputFolder string) {
 			if err != nil {
 				fmt.Println("error:", err)
 			}
-			jsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "%s_%s_tr_0.json"), header[0].Name, jDate.Format("0102"))
-			os.WriteFile(jsonFileName, jb, 0644)
+
+			os.WriteFile(filepath.Join(outputFolder, jsonFileName), jb, 0644)
 
 			groupNumber++
 			state = "Waiting"
