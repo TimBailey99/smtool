@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,7 +44,7 @@ func exportOzScore(section CsvSection, outputFolder string) {
 
 	j.RangeData = JsonRangeData{
 		Location:    "Hill Top",
-		FiringPoint: section.Header.No,
+		FiringPoint: section.Header.FiringPoint,
 		TargetType:  "ISSF",
 		Range:       strings.ReplaceAll(strings.ToLower(section.Header.Distance), "m", ""),
 		Units:       "M",
@@ -183,7 +184,7 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 	defer file.Close()
 
 	header := []*CsvHeader{}
-	headerCsv := []string{"date,name,no,distance,target", ""}
+	headerCsv := []string{"date,name,fp,distance,target", ""}
 
 	shots := []*CsvShotData{}
 	shotsCsv := []string{}
@@ -330,6 +331,8 @@ func main() {
 }
 
 func lookupValues(csvSections *[]*CsvSection) {
+	var re = regexp.MustCompile(`(?m)\d{3}`)
+
 	lookupFile, err := os.OpenFile("lookup.csv", os.O_RDONLY, os.ModePerm)
 	if err != nil {
 		panic(err)
@@ -343,15 +346,30 @@ func lookupValues(csvSections *[]*CsvSection) {
 	}
 
 	for _, csvSection := range *csvSections {
+		matches := re.FindAllString(csvSection.Header.Name, -1)
+		if matches == nil {
+			matches = []string{"999"}
+		}
+
 		found, success := lo.Find(lookupRows, func(i *LookupRow) bool {
-			return i.No == strings.ReplaceAll(csvSection.Header.No, "#", "")
+			return i.No == matches[0]
 		})
+
 		if success {
-			fmt.Printf("Matched %s to lookup \n", csvSection.Header.No)
+			fmt.Printf("Matched %s to lookup \n", csvSection.Header.Name)
 			csvSection.Header.Name = found.UIN
 			csvSection.Header.LookupRow = *found
 		} else {
-			fmt.Printf("Unable to match %s in lookup \n", csvSection.Header.No)
+			fmt.Printf("Unable to match %s in lookup \n", csvSection.Header.Name)
+			csvSection.Header.Name = "UNKNOWN"
+			csvSection.Header.LookupRow = LookupRow{
+				No:         "999",
+				UIN:        "UNKNOWN",
+				Name:       "UNKNOWN",
+				Discipline: "TBA",
+				Calibre:    "TBA",
+				CalibreRaw: "0",
+			}
 		}
 
 	}
