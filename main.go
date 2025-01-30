@@ -17,13 +17,149 @@ import (
 	"github.com/samber/lo"
 )
 
-type All struct {
+type CsvSection struct {
 	Header  CsvHeader
 	Shots   []*CsvShotData
 	Summary []*CsvSummaryData
 }
 
-func convertFile(fileName string, outputFolder string) {
+func exportOzScore(section CsvSection, outputFolder string) {
+
+	// Create OZScore compatible JSON
+	const shortForm = "Jan 02 2006"
+	jDate, _ := time.Parse(shortForm, section.Header.Date)
+
+	jsonFileName := fmt.Sprintf("%s_%s_tr_0.json", section.Header.Name, jDate.Format("0102"))
+
+	j := JsonData{}
+	j.Code = 0
+	j.Format = 2
+	j.Date = section.Header.Date
+	j.Filename = jsonFileName
+
+	j.Year = fmt.Sprintf("%v", jDate.Year())
+
+	j.RangeData = JsonRangeData{
+		Location:    "Hill Top",
+		FiringPoint: section.Header.Slug,
+		TargetType:  "ISSF",
+		Range:       strings.ReplaceAll(strings.ToLower(section.Header.Distance), "m", ""),
+		Units:       "M",
+	}
+	j.ShooterData = JsonShooterData{
+		Name: section.Header.Name,
+		Club: "SHRC",
+		UIN:  "TBA",
+		Num:  "TBA",
+	}
+
+	j.DisplayData.Scalefactor = 2
+
+	j.Stage = "0"
+
+	j.Shots = JsonShots{}
+	j.Shots.Discipline = "TBA"
+	j.Shots.Calibre = "TBA"
+	j.Shots.CalibreRaw = "TBA"
+	j.Shots.SightersCut = lo.Reduce(section.Shots, func(agg int, item *CsvShotData, _ int) int {
+		if strings.ToLower(item.Tags) == "sighter" || strings.HasPrefix(strings.ToLower(item.Id), "s") {
+			return agg + 1
+		}
+		return agg
+	}, 0)
+	j.Shots.ShotsFired = len(section.Shots)
+	j.Shots.CountingShots = lo.Reduce(section.Shots, func(agg int, item *CsvShotData, _ int) int {
+		if strings.ToLower(item.Tags) != "sighter" && !strings.HasPrefix(strings.ToLower(item.Id), "s") {
+			return agg + 1
+		}
+		return agg
+	}, 0)
+
+	j.Shots.Mpi = []JsonMpi{}
+
+	var minX float32 = 0
+	var maxX float32 = 0
+	var minY float32 = 0
+	var maxY float32 = 0
+	lo.ForEach(section.Shots, func(item *CsvShotData, index int) {
+		if item.XposMm < minX {
+			minX = item.XposMm
+		}
+		if item.XposMm > maxX {
+			maxX = item.XposMm
+		}
+		if item.YposMm < minY {
+			minY = item.YposMm
+		}
+		if item.YposMm > maxY {
+			maxY = item.YposMm
+		}
+	})
+
+	mpi := JsonMpi{
+		Height: maxX - minX,
+		Dia:    maxY - minY,
+	}
+	j.Shots.Mpi = append(j.Shots.Mpi, mpi)
+
+	j.Shots.Comp = []JsonComp{}
+
+	comp := JsonComp{}
+
+	var prev time.Time
+	comp.No = lo.Map(section.Shots, func(s *CsvShotData, index int) JsonShotData {
+		value := 0
+		if s.Score == "X" {
+			value = 6
+		} else if s.Score == "V" {
+			value = 5
+		} else {
+			i, _ := strconv.Atoi(s.Score)
+			value = i
+		}
+
+		const shortForm = "Jan 02 2006 3:04:05 pm"
+		const TwentyFourHourForm = "15:04:05"
+		t, _ := time.Parse(shortForm, j.Date+" "+s.Time)
+
+		if prev.IsZero() {
+			prev = t
+		}
+
+		since := int(t.Sub(prev).Seconds())
+		mins := since / 60
+
+		prev = t
+
+		return JsonShotData{
+			ShotNo:            index,
+			XPos:              s.XposMm,
+			YPos:              s.YposMm,
+			Dfc:               float32(math.Sqrt(math.Pow(float64(s.XposMm), 2) + math.Pow(float64(s.YposMm), 2))),
+			Value:             value,
+			Temp:              150,
+			Status:            1,
+			TimeOfShot:        t.Format(TwentyFourHourForm),
+			Time:              t.Unix(),
+			TimeSinceLastShot: fmt.Sprintf("%d:%02d", mins, since-(mins*60)),
+		}
+	})
+
+	j.Shots.Comp = append(j.Shots.Comp, comp)
+
+	// Export object to JSON
+	jb, err := json.MarshalIndent(j, "", "  ")
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+
+	os.WriteFile(filepath.Join(outputFolder, jsonFileName), jb, 0644)
+
+}
+
+func parseCsv(fileName string, outputFolder string) []CsvSection {
+	result := []CsvSection{}
+
 	// Make sure output folder exists
 	err := os.MkdirAll(outputFolder, os.ModePerm)
 	if err != nil {
@@ -92,10 +228,12 @@ func convertFile(fileName string, outputFolder string) {
 				}
 			}
 
-			data := All{}
+			data := CsvSection{}
 			data.Header = *header[0]
 			data.Shots = shots
 			data.Summary = summary
+
+			result = append(result, data)
 
 			b, err := json.MarshalIndent(data, "", "  ")
 			if err != nil {
@@ -104,136 +242,6 @@ func convertFile(fileName string, outputFolder string) {
 			// os.Stdout.Write(b)
 			csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
 			os.WriteFile(csvJsonFileName, b, 0644)
-
-			// Create OZScore compatible JSON
-			const shortForm = "Jan 02 2006"
-			jDate, _ := time.Parse(shortForm, header[0].Date)
-
-			jsonFileName := fmt.Sprintf("%s_%s_tr_0.json", header[0].Name, jDate.Format("0102"))
-
-			j := JsonData{}
-			j.Code = 0
-			j.Format = 2
-			j.Date = header[0].Date
-			j.Filename = jsonFileName
-
-			j.Year = fmt.Sprintf("%v", jDate.Year())
-
-			j.RangeData = JsonRangeData{
-				Location:    "Hill Top",
-				FiringPoint: header[0].Slug,
-				TargetType:  "ISSF",
-				Range:       strings.ReplaceAll(strings.ToLower(header[0].Distance), "m", ""),
-				Units:       "M",
-			}
-			j.ShooterData = JsonShooterData{
-				Name: header[0].Name,
-				Club: "SHRC",
-				UIN:  "TBA",
-				Num:  "TBA",
-			}
-
-			j.DisplayData.Scalefactor = 2
-
-			j.Stage = "0"
-
-			j.Shots = JsonShots{}
-			j.Shots.Discipline = "TBA"
-			j.Shots.Calibre = "TBA"
-			j.Shots.CalibreRaw = "TBA"
-			j.Shots.SightersCut = lo.Reduce(shots, func(agg int, item *CsvShotData, _ int) int {
-				if strings.ToLower(item.Tags) == "sighter" || strings.HasPrefix(strings.ToLower(item.Id), "s") {
-					return agg + 1
-				}
-				return agg
-			}, 0)
-			j.Shots.ShotsFired = len(shots)
-			j.Shots.CountingShots = lo.Reduce(shots, func(agg int, item *CsvShotData, _ int) int {
-				if strings.ToLower(item.Tags) != "sighter" && !strings.HasPrefix(strings.ToLower(item.Id), "s") {
-					return agg + 1
-				}
-				return agg
-			}, 0)
-
-			j.Shots.Mpi = []JsonMpi{}
-
-			var minX float32 = 0
-			var maxX float32 = 0
-			var minY float32 = 0
-			var maxY float32 = 0
-			lo.ForEach(shots, func(item *CsvShotData, index int) {
-				if item.XposMm < minX {
-					minX = item.XposMm
-				}
-				if item.XposMm > maxX {
-					maxX = item.XposMm
-				}
-				if item.YposMm < minY {
-					minY = item.YposMm
-				}
-				if item.YposMm > maxY {
-					maxY = item.YposMm
-				}
-			})
-
-			mpi := JsonMpi{
-				Height: maxX - minX,
-				Dia:    maxY - minY,
-			}
-			j.Shots.Mpi = append(j.Shots.Mpi, mpi)
-
-			j.Shots.Comp = []JsonComp{}
-
-			comp := JsonComp{}
-
-			var prev time.Time
-			comp.No = lo.Map(shots, func(s *CsvShotData, index int) JsonShotData {
-				value := 0
-				if s.Score == "X" {
-					value = 6
-				} else if s.Score == "V" {
-					value = 5
-				} else {
-					i, _ := strconv.Atoi(s.Score)
-					value = i
-				}
-
-				const shortForm = "Jan 02 2006 3:04:05 pm"
-				const TwentyFourHourForm = "15:04:05"
-				t, _ := time.Parse(shortForm, j.Date+" "+s.Time)
-
-				if prev.IsZero() {
-					prev = t
-				}
-
-				since := int(t.Sub(prev).Seconds())
-				mins := since / 60
-
-				prev = t
-
-				return JsonShotData{
-					ShotNo:            index,
-					XPos:              s.XposMm,
-					YPos:              s.YposMm,
-					Dfc:               float32(math.Sqrt(math.Pow(float64(s.XposMm), 2) + math.Pow(float64(s.YposMm), 2))),
-					Value:             value,
-					Temp:              150,
-					Status:            1,
-					TimeOfShot:        t.Format(TwentyFourHourForm),
-					Time:              t.Unix(),
-					TimeSinceLastShot: fmt.Sprintf("%d:%02d", mins, since-(mins*60)),
-				}
-			})
-
-			j.Shots.Comp = append(j.Shots.Comp, comp)
-
-			// Export object to JSON
-			jb, err := json.MarshalIndent(j, "", "  ")
-			if err != nil {
-				fmt.Println("error:", err)
-			}
-
-			os.WriteFile(filepath.Join(outputFolder, jsonFileName), jb, 0644)
 
 			groupNumber++
 			state = "Waiting"
@@ -270,8 +278,7 @@ func convertFile(fileName string, outputFolder string) {
 		log.Fatal(err)
 	}
 
-	fullPath, err := filepath.Abs(outputFolder)
-	fmt.Printf("Exported %d sections from csv file '%s' into folder '%s'\n", groupNumber-1, fileName, fullPath)
+	return result
 }
 
 func main() {
@@ -295,7 +302,15 @@ func main() {
 			os.Exit(1)
 		}
 
-		convertFile(*exportFile, *exportFolder)
+		csvResults := parseCsv(*exportFile, *exportFolder)
+
+		for _, csvSection := range csvResults {
+			exportOzScore(csvSection, *exportFolder)
+		}
+
+		fullPath, _ := filepath.Abs(*exportFolder)
+		fmt.Printf("Exported %d sections from csv file '%s' into folder '%s'\n", len(csvResults), *exportFile, fullPath)
+
 	default:
 		fmt.Println("expected 'export' subcommands")
 		os.Exit(1)
