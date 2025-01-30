@@ -6,6 +6,7 @@ type CsvHeader struct {
 	Slug     string `csv:"slug"`
 	Distance string `csv:"distance"`
 	Target   string `csv:"target"`
+	Stage    int
 }
 
 type CsvShotData struct {

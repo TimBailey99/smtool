@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,13 +25,13 @@ type CsvSection struct {
 	Summary []*CsvSummaryData
 }
 
+// Create OZScore compatible JSON
 func exportOzScore(section CsvSection, outputFolder string) {
 
-	// Create OZScore compatible JSON
 	const shortForm = "Jan 02 2006"
 	jDate, _ := time.Parse(shortForm, section.Header.Date)
 
-	jsonFileName := fmt.Sprintf("%s_%s_tr_0.json", section.Header.Name, jDate.Format("0102"))
+	jsonFileName := fmt.Sprintf("%s_%s_tr_%d.json", section.Header.Name, jDate.Format("0102"), section.Header.Stage)
 
 	j := JsonData{}
 	j.Code = 0
@@ -55,7 +57,7 @@ func exportOzScore(section CsvSection, outputFolder string) {
 
 	j.DisplayData.Scalefactor = 2
 
-	j.Stage = "0"
+	j.Stage = fmt.Sprintf("%d", section.Header.Stage)
 
 	j.Shots = JsonShots{}
 	j.Shots.Discipline = "TBA"
@@ -157,8 +159,8 @@ func exportOzScore(section CsvSection, outputFolder string) {
 
 }
 
-func parseCsv(fileName string, outputFolder string) []CsvSection {
-	result := []CsvSection{}
+func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
+	result := []*CsvSection{}
 
 	// Make sure output folder exists
 	err := os.MkdirAll(outputFolder, os.ModePerm)
@@ -233,7 +235,7 @@ func parseCsv(fileName string, outputFolder string) []CsvSection {
 			data.Shots = shots
 			data.Summary = summary
 
-			result = append(result, data)
+			result = append(result, &data)
 
 			b, err := json.MarshalIndent(data, "", "  ")
 			if err != nil {
@@ -278,7 +280,7 @@ func parseCsv(fileName string, outputFolder string) []CsvSection {
 		log.Fatal(err)
 	}
 
-	return result
+	return &result
 }
 
 func main() {
@@ -302,18 +304,40 @@ func main() {
 			os.Exit(1)
 		}
 
-		csvResults := parseCsv(*exportFile, *exportFolder)
-
-		for _, csvSection := range csvResults {
-			exportOzScore(csvSection, *exportFolder)
+		csvSections := parseCsv(*exportFile, *exportFolder)
+		computeStages(csvSections)
+		for _, csvSection := range *csvSections {
+			exportOzScore(*csvSection, *exportFolder)
 		}
 
 		fullPath, _ := filepath.Abs(*exportFolder)
-		fmt.Printf("Exported %d sections from csv file '%s' into folder '%s'\n", len(csvResults), *exportFile, fullPath)
+		fmt.Printf("Exported %d sections from csv file '%s' into folder '%s'\n", len(*csvSections), *exportFile, fullPath)
 
 	default:
 		fmt.Println("expected 'export' subcommands")
 		os.Exit(1)
 	}
 
+}
+
+func computeStages(csvSections *[]*CsvSection) {
+	groups := lo.GroupBy(*csvSections, func(i *CsvSection) string {
+		return i.Header.Date + strings.ToLower(i.Header.Name)
+	})
+
+	fmt.Println("Groups----------------------------------------------")
+	fmt.Println(groups)
+	fmt.Println("----------------------------------------------------")
+
+	firstShotTimeOrder := func(a *CsvSection, b *CsvSection) int {
+		return cmp.Compare(a.Shots[0].Time, b.Shots[0].Time)
+	}
+
+	for _, groupedSections := range groups {
+		slices.SortFunc(groupedSections, firstShotTimeOrder)
+
+		for i, section := range groupedSections {
+			section.Header.Stage = i + 1
+		}
+	}
 }
