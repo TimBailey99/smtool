@@ -21,7 +21,7 @@ linux: $(LINUX)
 darwin: $(DARWIN)
 
 $(WINDOWS):
-	env GOOS=windows GOARCH=amd64 go build -v -o bin/win/$(EXECUTABLE).exe -ldflags="-s -w -X main.version=$(VERSION)" && zip --junk-paths bin/$(WINDOWS).zip bin/win/$(EXECUTABLE).exe
+	env GOOS=windows GOARCH=amd64 go build -v -o bin/win/$(EXECUTABLE).exe && zip --junk-paths bin/$(WINDOWS).zip bin/win/$(EXECUTABLE).exe
 
 $(LINUX):
 	env GOOS=linux GOARCH=amd64 go build -v -o bin/linux/$(EXECUTABLE) -ldflags="-s -w -X main.version=$(VERSION)" && zip --junk-paths bin/$(LINUX).zip bin/linux/$(EXECUTABLE)

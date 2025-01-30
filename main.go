@@ -43,16 +43,16 @@ func exportOzScore(section CsvSection, outputFolder string) {
 
 	j.RangeData = JsonRangeData{
 		Location:    "Hill Top",
-		FiringPoint: section.Header.Slug,
+		FiringPoint: section.Header.No,
 		TargetType:  "ISSF",
 		Range:       strings.ReplaceAll(strings.ToLower(section.Header.Distance), "m", ""),
 		Units:       "M",
 	}
 	j.ShooterData = JsonShooterData{
-		Name: section.Header.Name,
+		Name: section.Header.LookupRow.Name,
 		Club: "SHRC",
-		UIN:  "TBA",
-		Num:  "TBA",
+		UIN:  section.Header.LookupRow.UIN,
+		Num:  section.Header.LookupRow.No,
 	}
 
 	j.DisplayData.Scalefactor = 2
@@ -60,9 +60,9 @@ func exportOzScore(section CsvSection, outputFolder string) {
 	j.Stage = fmt.Sprintf("%d", section.Header.Stage)
 
 	j.Shots = JsonShots{}
-	j.Shots.Discipline = "TBA"
-	j.Shots.Calibre = "TBA"
-	j.Shots.CalibreRaw = "TBA"
+	j.Shots.Discipline = section.Header.LookupRow.Discipline
+	j.Shots.Calibre = section.Header.LookupRow.Calibre
+	j.Shots.CalibreRaw = section.Header.LookupRow.CalibreRaw
 	j.Shots.SightersCut = lo.Reduce(section.Shots, func(agg int, item *CsvShotData, _ int) int {
 		if strings.ToLower(item.Tags) == "sighter" || strings.HasPrefix(strings.ToLower(item.Id), "s") {
 			return agg + 1
@@ -170,14 +170,14 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 
 	state := string("Waiting")
 
-	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, os.ModePerm)
+	file, err := os.OpenFile(fileName, os.O_RDONLY, os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 
 	header := []*CsvHeader{}
-	headerCsv := []string{"date,name,slug,distance,target", ""}
+	headerCsv := []string{"date,name,no,distance,target", ""}
 
 	shots := []*CsvShotData{}
 	shotsCsv := []string{}
@@ -255,7 +255,9 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 		}
 
 		if state == "Waiting" {
-			headerCsv[1] = line
+			// Ensure we only have 5 parts, assume no quoteed fields containing commas
+			parts := strings.Split(line, ",")
+			headerCsv[1] = strings.Join(parts[:5], ",")
 
 			if err := gocsv.UnmarshalString(strings.Join(headerCsv[:], "\n"), &header); err != nil { // Load clients from file
 				panic(err)
@@ -305,6 +307,7 @@ func main() {
 		}
 
 		csvSections := parseCsv(*exportFile, *exportFolder)
+		lookupValues(csvSections)
 		computeStages(csvSections)
 		for _, csvSection := range *csvSections {
 			exportOzScore(*csvSection, *exportFolder)
@@ -320,14 +323,42 @@ func main() {
 
 }
 
+func lookupValues(csvSections *[]*CsvSection) {
+	lookupFile, err := os.OpenFile("lookup.csv", os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	defer lookupFile.Close()
+
+	lookupRows := []*LookupRow{}
+
+	if err := gocsv.UnmarshalFile(lookupFile, &lookupRows); err != nil { // Load clients from file
+		panic(err)
+	}
+
+	for _, csvSection := range *csvSections {
+		found, success := lo.Find(lookupRows, func(i *LookupRow) bool {
+			return i.No == strings.ReplaceAll(csvSection.Header.No, "#", "")
+		})
+		if success {
+			fmt.Printf("Matched %s to lookup \n", csvSection.Header.No)
+			csvSection.Header.Name = found.UIN
+			csvSection.Header.LookupRow = *found
+		} else {
+			fmt.Printf("Unable to match %s in lookup \n", csvSection.Header.No)
+		}
+
+	}
+}
+
 func computeStages(csvSections *[]*CsvSection) {
 	groups := lo.GroupBy(*csvSections, func(i *CsvSection) string {
 		return i.Header.Date + strings.ToLower(i.Header.Name)
 	})
 
-	fmt.Println("Groups----------------------------------------------")
-	fmt.Println(groups)
-	fmt.Println("----------------------------------------------------")
+	//fmt.Println("Groups----------------------------------------------")
+	//fmt.Println(groups)
+	//fmt.Println("----------------------------------------------------")
 
 	firstShotTimeOrder := func(a *CsvSection, b *CsvSection) int {
 		return cmp.Compare(a.Shots[0].Time, b.Shots[0].Time)

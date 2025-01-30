@@ -1,12 +1,13 @@
 package main
 
 type CsvHeader struct {
-	Date     string `csv:"date"`
-	Name     string `csv:"name"`
-	Slug     string `csv:"slug"`
-	Distance string `csv:"distance"`
-	Target   string `csv:"target"`
-	Stage    int
+	Date      string `csv:"date"`
+	Name      string `csv:"name"`
+	No        string `csv:"no"`
+	Distance  string `csv:"distance"`
+	Target    string `csv:"target"`
+	Stage     int
+	LookupRow LookupRow
 }
 
 type CsvShotData struct {
