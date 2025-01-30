@@ -133,6 +133,12 @@ func exportOzScore(section CsvSection, outputFolder string) {
 
 		prev = t
 
+		// if its a sighter, then status = 1
+		status := 0
+		if strings.ToLower(s.Tags) == "sighter" || strings.HasPrefix(strings.ToLower(s.Id), "s") {
+			status = 1
+		}
+
 		return JsonShotData{
 			ShotNo:            index,
 			XPos:              s.XposMm,
@@ -140,7 +146,7 @@ func exportOzScore(section CsvSection, outputFolder string) {
 			Dfc:               float32(math.Sqrt(math.Pow(float64(s.XposMm), 2) + math.Pow(float64(s.YposMm), 2))),
 			Value:             value,
 			Temp:              150,
-			Status:            1,
+			Status:            status,
 			TimeOfShot:        t.Format(TwentyFourHourForm),
 			Time:              t.Unix(),
 			TimeSinceLastShot: fmt.Sprintf("%d:%02d", mins, since-(mins*60)),
