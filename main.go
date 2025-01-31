@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"cmp"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -249,6 +248,9 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 			groupNumber++
 			state = "Waiting"
 
+			header = []*CsvHeader{}
+			shots = []*CsvShotData{}
+			summary = []*CsvSummaryData{}
 			shotsCsv = []string{}
 			summaryCsv = []string{}
 
@@ -284,7 +286,7 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 
 	result = completeSection(header, shots, summary, result, outputFolder, groupNumber)
 
-	fmt.Println("Done")
+	fmt.Println("Parsing complete")
 
 	return &result
 }
@@ -311,11 +313,10 @@ func completeSection(header []*CsvHeader, shots []*CsvShotData, summary []*CsvSu
 	if err != nil {
 		fmt.Println("error:", err)
 	}
-	// os.Stdout.Write(b)
+
 	csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
 	os.WriteFile(csvJsonFileName, b, 0644)
 
-	// fmt.Println(fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber))
 	return result
 }
 
@@ -341,6 +342,7 @@ func main() {
 		}
 
 		csvSections := parseCsv(*exportFile, *exportFolder)
+
 		lookupValues(csvSections)
 		computeStages(csvSections)
 		for _, csvSection := range *csvSections {
@@ -408,11 +410,16 @@ func computeStages(csvSections *[]*CsvSection) {
 	})
 
 	firstShotTimeOrder := func(a *CsvSection, b *CsvSection) int {
-		return cmp.Compare(a.Shots[0].Time, b.Shots[0].Time)
+		const shortForm = "Jan 02 2006 3:04:05 pm"
+		aTime, _ := time.Parse(shortForm, a.Header.Date+" "+a.Shots[0].Time)
+		bTime, _ := time.Parse(shortForm, b.Header.Date+" "+b.Shots[0].Time)
+
+		fmt.Printf("Compare %s & %s\n", aTime, bTime)
+
+		return aTime.Compare(bTime)
 	}
 
 	for _, groupedSections := range groups {
-
 		slices.SortFunc(groupedSections, firstShotTimeOrder)
 
 		for i, section := range groupedSections {
