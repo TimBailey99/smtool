@@ -9,7 +9,7 @@ DARWIN=$(EXECUTABLE)_darwin_amd64_$(VERSION)
 all: test build
 
 test:
-	go test ./...
+	go test -v -coverprofile cover.out && go tool cover -html cover.out -o cover.html
 
 build: windows linux darwin
 	@echo version: $(VERSION)

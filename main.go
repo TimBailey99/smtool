@@ -224,6 +224,7 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 			//fmt.Println(strings.Join(shotsCsv[:], "\n"))
 
 			if err := gocsv.UnmarshalString(strings.Join(shotsCsv[:], "\n"), &shots); err != nil {
+				fmt.Println(shotsCsv)
 				panic(err)
 			}
 
@@ -255,9 +256,7 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 		}
 
 		if state == "Waiting" {
-			// Ensure we only have 5 parts, assume no quoteed fields containing commas
-			parts := strings.Split(line, ",")
-			headerCsv[1] = strings.Join(parts[:5], ",")
+			headerCsv[1] = maxParts(line, 5)
 
 			if err := gocsv.UnmarshalString(strings.Join(headerCsv[:], "\n"), &header); err != nil { // Load clients from file
 				panic(err)
@@ -272,9 +271,10 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 			shotsCsv = append(shotsCsv, "none"+line+",none")
 			state = "ConsumingData"
 		} else if state == "ConsumingData" {
-			shotsCsv = append(shotsCsv, line)
+
+			shotsCsv = append(shotsCsv, maxParts(line, 19))
 		} else if state == "ConsumingSummary" {
-			summaryCsv = append(summaryCsv, line)
+			summaryCsv = append(summaryCsv, maxParts(line, 19))
 		}
 	}
 
@@ -287,6 +287,16 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 	fmt.Println("Done")
 
 	return &result
+}
+
+func maxParts(line string, size int) string {
+	// Ensure we only have 19 parts, assume no quoteed fields containing commas
+	parts := strings.Split(line, ",")
+	if len(parts) > size {
+		fmt.Printf("Oversize line truncated from %d to %d\n", len(parts), size)
+	}
+	parts = append(parts, "", "", "", "")
+	return strings.Join(parts[0:size], ",")
 }
 
 func completeSection(header []*CsvHeader, shots []*CsvShotData, summary []*CsvSummaryData, result []*CsvSection, outputFolder string, groupNumber int) []*CsvSection {
@@ -397,15 +407,12 @@ func computeStages(csvSections *[]*CsvSection) {
 		return i.Header.Date + strings.ToLower(i.Header.Name)
 	})
 
-	//fmt.Println("Groups----------------------------------------------")
-	//fmt.Println(groups)
-	//fmt.Println("----------------------------------------------------")
-
 	firstShotTimeOrder := func(a *CsvSection, b *CsvSection) int {
 		return cmp.Compare(a.Shots[0].Time, b.Shots[0].Time)
 	}
 
 	for _, groupedSections := range groups {
+
 		slices.SortFunc(groupedSections, firstShotTimeOrder)
 
 		for i, section := range groupedSections {
