@@ -1,5 +1,7 @@
 # smtool
 
-`go build` to build linux app
+Shotmarker to OZScore conversion tool
 
-`GOOS=windows GOARCH=amd64 go build` to build windows
+`make` to build for all environments
+
+`make test` to run tests

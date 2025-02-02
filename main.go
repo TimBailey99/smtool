@@ -35,7 +35,7 @@ func exportOzScore(section CsvSection, outputFolder string) {
 	const shortForm = "Jan 02 2006"
 	jDate, _ := time.Parse(shortForm, section.Header.Date)
 
-	jsonFileName := fmt.Sprintf("%s_%s_tr_%d.json", section.Header.Name, jDate.Format("0102"), section.Header.Stage)
+	jsonFileName := fmt.Sprintf("%s_%s_%s_%d.json", section.Header.Name, jDate.Format("0102"), strings.ToLower(section.Header.LookupRow.Discipline), section.Header.Stage)
 
 	j := JsonData{}
 	j.Code = 0
@@ -114,15 +114,7 @@ func exportOzScore(section CsvSection, outputFolder string) {
 
 	var prev time.Time
 	comp.No = lo.Map(section.Shots, func(s *CsvShotData, index int) JsonShotData {
-		value := 0
-		if s.Score == "X" {
-			value = 6
-		} else if s.Score == "V" {
-			value = 5
-		} else {
-			i, _ := strconv.Atoi(s.Score)
-			value = i
-		}
+		value := computeScore(section, s)
 
 		const shortForm = "Jan 02 2006 3:04:05 pm"
 		const TwentyFourHourForm = "15:04:05"
@@ -167,6 +159,35 @@ func exportOzScore(section CsvSection, outputFolder string) {
 
 	os.WriteFile(filepath.Join(outputFolder, jsonFileName), jb, 0644)
 
+}
+
+func computeScore(section CsvSection, s *CsvShotData) int {
+
+	switch section.Header.LookupRow.Discipline {
+	case "fo":
+		fallthrough
+	case "fs":
+		fallthrough
+	case "ftr":
+		if s.Score == "X" {
+			return 7
+		} else {
+			i, _ := strconv.Atoi(s.Score)
+			return i
+		}
+	case "tr":
+		if s.Score == "X" {
+			return 7
+		} else if s.Score == "V" {
+			return 6
+		} else {
+			i, _ := strconv.Atoi(s.Score)
+			return i
+		}
+	default:
+		fmt.Println("Unknown Discipline " + section.Header.LookupRow.Discipline)
+		return 0
+	}
 }
 
 func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
@@ -395,7 +416,7 @@ func lookupValues(csvSections *[]*CsvSection) {
 				No:         "999",
 				UIN:        "UNKNOWN",
 				Name:       "UNKNOWN",
-				Discipline: "TBA",
+				Discipline: "tr",
 				Calibre:    "TBA",
 				CalibreRaw: "0",
 			}
@@ -414,7 +435,7 @@ func computeStages(csvSections *[]*CsvSection) {
 		aTime, _ := time.Parse(shortForm, a.Header.Date+" "+a.Shots[0].Time)
 		bTime, _ := time.Parse(shortForm, b.Header.Date+" "+b.Shots[0].Time)
 
-		fmt.Printf("Compare %s & %s\n", aTime, bTime)
+		//fmt.Printf("Compare %s & %s\n", aTime, bTime)
 
 		return aTime.Compare(bTime)
 	}
