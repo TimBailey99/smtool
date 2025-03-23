@@ -168,6 +168,10 @@ func computeScore(section CsvSection, s *CsvShotData) int {
 		fallthrough
 	case "fs":
 		fallthrough
+	case "rf":
+		fallthrough
+	case "cf":
+		fallthrough
 	case "ftr":
 		if s.Score == "X" {
 			return 7
@@ -188,6 +192,50 @@ func computeScore(section CsvSection, s *CsvShotData) int {
 		fmt.Println("Unknown Discipline " + section.Header.LookupRow.Discipline)
 		return 0
 	}
+}
+
+func parseRimfireCsv(fileName string, outputFolder string) *[]*CsvSection {
+	result := []*CsvSection{}
+
+	// Make sure output folder exists
+	err := os.MkdirAll(outputFolder, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+
+	file, err := os.OpenFile(fileName, os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	rimfireRows := []*RimfireRow{}
+
+	if err := gocsv.UnmarshalFile(file, &rimfireRows); err != nil { // Load from file
+		panic(err)
+	}
+
+	for i, rimfireRow := range rimfireRows {
+		fmt.Printf("Row! (%s)\n", rimfireRow.Name)
+
+		data := CsvSection{}
+		data.Header = CsvHeader{Name: rimfireRow.Name, Date: "Aug 13 2022"}
+		data.Shots = []*CsvShotData{}
+		data.Summary = []*CsvSummaryData{}
+
+		result = append(result, &data)
+
+		b, err := json.MarshalIndent(data, "", "  ")
+		if err != nil {
+			fmt.Println("error:", err)
+		}
+
+		csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), i)
+		os.WriteFile(csvJsonFileName, b, 0644)
+	}
+
+	fmt.Println("Rimfire parsing complete")
+	return &result
 }
 
 func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
@@ -307,7 +355,7 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 
 	result = completeSection(header, shots, summary, result, outputFolder, groupNumber)
 
-	fmt.Println("Parsing complete")
+	fmt.Println("Shotmarker Parsing complete")
 
 	return &result
 }
@@ -344,17 +392,17 @@ func completeSection(header []*CsvHeader, shots []*CsvShotData, summary []*CsvSu
 func main() {
 	fmt.Printf("SHRC Shotmarker tool (%s)\n", version)
 
-	exportCmd := flag.NewFlagSet("export", flag.ExitOnError)
-	exportFile := exportCmd.String("f", "", "Filename of the csv file to export")
-	exportFolder := exportCmd.String("o", "", "Destination folder for exported files")
-
 	if len(os.Args) < 2 {
-		fmt.Println("expected 'export' subcommands")
+		fmt.Println("expected 'export' or 'exportrf' subcommands")
 		os.Exit(1)
 	}
 
 	switch os.Args[1] {
 	case "export":
+		exportCmd := flag.NewFlagSet("export", flag.ExitOnError)
+		exportFile := exportCmd.String("f", "", "Filename of the csv file to export")
+		exportFolder := exportCmd.String("o", "", "Destination folder for exported files")
+
 		exportCmd.Parse(os.Args[2:])
 
 		if len(strings.TrimSpace(*exportFile)) == 0 {
@@ -372,9 +420,31 @@ func main() {
 
 		fullPath, _ := filepath.Abs(*exportFolder)
 		fmt.Printf("Exported %d sections from csv file '%s' into folder '%s'\n", len(*csvSections), *exportFile, fullPath)
+	case "exportrf":
+		exportRfCmd := flag.NewFlagSet("exportrf", flag.ExitOnError)
+		exportFile := exportRfCmd.String("f", "", "Filename of the csv file to export")
+		exportFolder := exportRfCmd.String("o", "", "Destination folder for exported files")
+
+		exportRfCmd.Parse(os.Args[2:])
+
+		if len(strings.TrimSpace(*exportFile)) == 0 {
+			fmt.Println("expected 'file' to have a valid filename")
+			os.Exit(1)
+		}
+
+		csvSections := parseRimfireCsv(*exportFile, *exportFolder)
+
+		lookupValues(csvSections)
+		computeStages(csvSections)
+		for _, csvSection := range *csvSections {
+			exportOzScore(*csvSection, *exportFolder)
+		}
+
+		fullPath, _ := filepath.Abs(*exportFolder)
+		fmt.Printf("Exported %d sections from csv file '%s' into folder '%s'\n", len(*csvSections), *exportFile, fullPath)
 
 	default:
-		fmt.Println("expected 'export' subcommands")
+		fmt.Println("expected 'export' or 'exportrf' subcommands")
 		os.Exit(1)
 	}
 
