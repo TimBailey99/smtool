@@ -35,7 +35,7 @@ func exportOzScore(section CsvSection, outputFolder string) {
 	const shortForm = "Jan 02 2006"
 	jDate, _ := time.Parse(shortForm, section.Header.Date)
 
-	jsonFileName := fmt.Sprintf("%s_%s_%s_%d.json", section.Header.Name, jDate.Format("0102"), strings.ToLower(section.Header.LookupRow.Discipline), section.Header.Stage)
+	jsonFileName := fmt.Sprintf("%s_%s_%s_%d.json", section.Header.Name, jDate.Format("0102"), strings.ToLower(section.Header.LookupRow.Discipline), section.Header.Stage-1)
 
 	j := JsonData{}
 	j.Code = 0
