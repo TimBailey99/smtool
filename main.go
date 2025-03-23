@@ -378,13 +378,13 @@ func completeSection(header []*CsvHeader, shots []*CsvShotData, summary []*CsvSu
 
 	result = append(result, &data)
 
-	b, err := json.MarshalIndent(data, "", "  ")
+	_, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		fmt.Println("error:", err)
 	}
 
-	csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
-	os.WriteFile(csvJsonFileName, b, 0644)
+	// csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
+	// os.WriteFile(csvJsonFileName, b, 0644)
 
 	return result
 }
