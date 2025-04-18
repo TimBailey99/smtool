@@ -118,7 +118,7 @@ func exportOzScore(section CsvSection, outputFolder string) {
 
 		const shortForm = "Jan 02 2006 3:04:05 pm"
 		const TwentyFourHourForm = "15:04:05"
-		t, _ := time.Parse(shortForm, j.Date+" "+s.Time)
+		t, _ := time.Parse(shortForm, j.Date+" "+strings.ToLower(s.Time))
 
 		if prev.IsZero() {
 			prev = t
