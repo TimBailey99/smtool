@@ -24,9 +24,8 @@ var (
 )
 
 type CsvSection struct {
-	Header  CsvHeader
-	Shots   []*CsvShotData
-	Summary []*CsvSummaryData
+	Header CsvHeader
+	Shots  []*CsvShotData
 }
 
 // Create OZScore compatible JSON
@@ -221,7 +220,6 @@ func parseRimfireCsv(fileName string, outputFolder string) *[]*CsvSection {
 		data := CsvSection{}
 		data.Header = CsvHeader{Name: rimfireRow.Name, Date: "Aug 13 2022"}
 		data.Shots = []*CsvShotData{}
-		data.Summary = []*CsvSummaryData{}
 
 		result = append(result, &data)
 
@@ -256,13 +254,10 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 	defer file.Close()
 
 	header := []*CsvHeader{}
-	headerCsv := []string{"date,name,fp,distance,target", ""}
+	headerCsv := []string{"date,name,fp,distance,target,none", ""}
 
 	shots := []*CsvShotData{}
 	shotsCsv := []string{}
-
-	summary := []*CsvSummaryData{}
-	summaryCsv := []string{}
 
 	scanner := bufio.NewScanner(file)
 	lineNumber := 0
@@ -272,7 +267,7 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 		lineNumber++
 		line := scanner.Text()
 
-		// fmt.Printf("line %03d %s\n", lineNumber, state)
+		fmt.Printf("line %03d %s\n", lineNumber, state)
 
 		// Skip rows 1 & 2
 		if lineNumber <= 2 {
@@ -283,69 +278,51 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 		if state == "Waiting" && len(strings.TrimSpace(line)) == 0 {
 			continue
 		}
-		if state == "WaitingForData" && len(strings.TrimSpace(line)) == 0 {
+		if state == "WaitingForData" && (len(strings.TrimSpace(line)) == 0 || strings.HasPrefix(line, ",")) {
 			state = "ConsumingDataHeader"
 			continue
 		}
 		if state == "ConsumingData" && len(strings.TrimSpace(line)) == 0 {
 			// We've finished consuming the shots
-			//fmt.Println(strings.Join(shotsCsv[:], "\n"))
+			fmt.Println("ConsumingData....", strings.Join(shotsCsv[:], "\n"))
 
 			if err := gocsv.UnmarshalString(strings.Join(shotsCsv[:], "\n"), &shots); err != nil {
-				fmt.Println(shotsCsv)
+
 				panic(err)
 			}
 
-			state = "ConsumingSummary"
-			continue
-		}
-		if state == "ConsumingSummary" && len(strings.TrimSpace(line)) == 0 {
-			// We've finished consuming the summary
-			if len(summaryCsv) > 0 {
-				//fmt.Println("Summary----------------------------------------------")
-				//fmt.Println(strings.Join(summaryCsv[:], "\n"))
-
-				summaryCsv = append([]string{"none,none,none,none,name,x (mm),y (mm),x (inch),y (inch),x (moa),y (moa),x (mil),y (mil),v (m/s),v (fps),yaw (deg), pitch (deg),quality,none"}, summaryCsv...)
-
-				if err := gocsv.UnmarshalString(strings.Join(summaryCsv[:], "\n"), &summary); err != nil {
-					panic(err)
-				}
-			}
-
-			result = completeSection(header, shots, summary, result, outputFolder, groupNumber)
+			result = completeSection(header, shots, result, outputFolder, groupNumber)
 
 			groupNumber++
 			state = "Waiting"
 
 			header = []*CsvHeader{}
 			shots = []*CsvShotData{}
-			summary = []*CsvSummaryData{}
 			shotsCsv = []string{}
-			summaryCsv = []string{}
 
 			continue
 		}
 
 		if state == "Waiting" {
-			headerCsv[1] = maxParts(line, 5)
+			headerCsv[1] = maxParts(line, 6)
 
-			if err := gocsv.UnmarshalString(strings.Join(headerCsv[:], "\n"), &header); err != nil { // Load clients from file
+			if err := gocsv.UnmarshalString(strings.Join(headerCsv[:], "\n"), &header); err != nil {
 				panic(err)
 			}
 
-			//fmt.Println("Header----------------------------------------------")
-			//fmt.Println(strings.Join(headerCsv[:], "\n"))
-			//fmt.Println("----------------------------------------------------")
+			fmt.Println("Header----------------------------------------------")
+			fmt.Println(strings.Join(headerCsv[:], "\n"))
+			fmt.Println("----------------------------------------------------")
 
-			state = "WaitingForData"
+			state = "ConsumingDataHeader"
 		} else if state == "ConsumingDataHeader" {
-			shotsCsv = append(shotsCsv, "none"+line+",none")
+			fmt.Println("ShotHeader....", line)
+			shotsCsv = append(shotsCsv, maxParts("none"+line+",none", 14))
 			state = "ConsumingData"
 		} else if state == "ConsumingData" {
 
-			shotsCsv = append(shotsCsv, maxParts(line, 19))
-		} else if state == "ConsumingSummary" {
-			summaryCsv = append(summaryCsv, maxParts(line, 19))
+			shotsCsv = append(shotsCsv, maxParts(line, 14))
+			fmt.Println("SHOTS", shotsCsv)
 		}
 	}
 
@@ -353,7 +330,14 @@ func parseCsv(fileName string, outputFolder string) *[]*CsvSection {
 		log.Fatal(err)
 	}
 
-	result = completeSection(header, shots, summary, result, outputFolder, groupNumber)
+	if len(shotsCsv) > 0 {
+		if err := gocsv.UnmarshalString(strings.Join(shotsCsv[:], "\n"), &shots); err != nil {
+
+			panic(err)
+		}
+	}
+
+	result = completeSection(header, shots, result, outputFolder, groupNumber)
 
 	fmt.Println("Shotmarker Parsing complete")
 
@@ -370,21 +354,20 @@ func maxParts(line string, size int) string {
 	return strings.Join(parts[0:size], ",")
 }
 
-func completeSection(header []*CsvHeader, shots []*CsvShotData, summary []*CsvSummaryData, result []*CsvSection, outputFolder string, groupNumber int) []*CsvSection {
+func completeSection(header []*CsvHeader, shots []*CsvShotData, result []*CsvSection, outputFolder string, groupNumber int) []*CsvSection {
 	data := CsvSection{}
 	data.Header = *header[0]
 	data.Shots = shots
-	data.Summary = summary
 
 	result = append(result, &data)
 
-	_, err := json.MarshalIndent(data, "", "  ")
+	b, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		fmt.Println("error:", err)
 	}
 
-	// csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
-	// os.WriteFile(csvJsonFileName, b, 0644)
+	csvJsonFileName := fmt.Sprintf(filepath.Join(outputFolder, "csv_%03d.json"), groupNumber)
+	os.WriteFile(csvJsonFileName, b, 0644)
 
 	return result
 }
@@ -501,6 +484,8 @@ func computeStages(csvSections *[]*CsvSection) {
 	})
 
 	firstShotTimeOrder := func(a *CsvSection, b *CsvSection) int {
+		fmt.Println("firstShotTimeOrder", len(a.Shots), len(b.Shots))
+
 		const shortForm = "Jan 02 2006 3:04:05 pm"
 		aTime, _ := time.Parse(shortForm, a.Header.Date+" "+a.Shots[0].Time)
 		bTime, _ := time.Parse(shortForm, b.Header.Date+" "+b.Shots[0].Time)
@@ -510,7 +495,8 @@ func computeStages(csvSections *[]*CsvSection) {
 		return aTime.Compare(bTime)
 	}
 
-	for _, groupedSections := range groups {
+	for group, groupedSections := range groups {
+		fmt.Println("computeStages", group, len(groupedSections))
 		slices.SortFunc(groupedSections, firstShotTimeOrder)
 
 		for i, section := range groupedSections {
