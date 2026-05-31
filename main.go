@@ -48,7 +48,7 @@ func exportOzScore(section CsvSection, outputFolder string) {
 	j.RangeData = JsonRangeData{
 		Location:    "Hill Top",
 		FiringPoint: section.Header.FiringPoint,
-		TargetType:  "ISSF",
+		TargetType:  "ICFRA",
 		Range:       strings.ReplaceAll(strings.ToLower(section.Header.Distance), "m", ""),
 		Units:       "M",
 	}
